@@ -63,6 +63,7 @@
 
         <trafficLightRendererContributor implementation="org.jetbrains.plugins.scala.externalHighlighters.CustomTrafficLightRendererContributor"/>
 
+        <commandLineInspectionProjectConfigurator implementation="org.jetbrains.sbt.project.SbtCommandLineProjectConfigurator"/>
         <defaultHighlightingSettingProvider implementation="org.jetbrains.plugins.scala.annotator.ScalaDefaultHighlightingSettingProvider"/>
 
         <breadcrumbsInfoProvider
