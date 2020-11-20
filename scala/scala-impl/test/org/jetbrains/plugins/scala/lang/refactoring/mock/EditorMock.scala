@@ -12,7 +12,6 @@ import com.intellij.openapi.editor.impl.DocumentImpl
 /**
  * Pavel Fatin
  */
-
 class EditorMock(text: String, offset: Int) extends EditorStub {
   private val selection = new SelectionModelStub(this)
 
@@ -48,6 +47,8 @@ class EditorMock(text: String, offset: Int) extends EditorStub {
     override def execute(batchMode: Boolean, operation: Runnable): Unit = {}
 
     override def isInBatchMode: Boolean = false
+
+    override def addInlineElement[T <: EditorCustomElementRenderer](offset: Int, relatesToPrecedingText: Boolean, priority: Int, renderer: T): Inlay[T] = null
   }
 
   override def offsetToLogicalPosition(offset: Int): LogicalPosition = {
