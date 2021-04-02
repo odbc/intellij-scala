@@ -8,7 +8,7 @@ import org.jetbrains.plugins.scala.lang.psi.api.ScalaFile
 import scala.concurrent.duration.DurationInt
 
 final class WorksheetCompilerImpl
-  extends org.jetbrains.plugins.scala.externalHighlighters.compiler.WorksheetCompiler {
+  extends org.jetbrains.plugins.scala.externalHighlighters.compiler.WorksheetHighlightingCompiler {
 
   override def compile(file: PsiFile, document: Document, client: Client): Unit = {
     val scalaFile = file match {
@@ -16,6 +16,9 @@ final class WorksheetCompilerImpl
       case _ =>
         return
     }
+
+    if (file.getProject.isDisposed)
+      return
 
     val module = scalaFile.module.getOrElse(return)
     val compiler = new WorksheetCompiler(module, scalaFile)

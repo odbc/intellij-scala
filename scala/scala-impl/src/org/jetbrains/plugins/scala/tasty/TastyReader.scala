@@ -1,20 +1,17 @@
 package org.jetbrains.plugins.scala.tasty
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.net.URLClassLoader
 import java.nio.file.{Files, Paths, StandardCopyOption, StandardOpenOption}
 import java.util.jar.JarFile
 
 import com.intellij.util.PathUtil
-import org.jetbrains.plugins.scala.buildinfo.BuildInfo
 
-import scala.quoted.Reflection
-import scala.tasty.inspector.{ConsumeTasty, TastyConsumer}
 import scala.util.Using
 
 object TastyReader {
-  private val MajorVersion = 25
-  private val MinorVersion = 1
+  private val MajorVersion = 28
+  private val MinorVersion = 0
 
   // A TASTy document is composed of a header, which contains a magic number 0x5CA1AB1F, a version number and a UUID.
   // * https://github.com/scala/scala/pull/9109/files#diff-f7bbafb9ed1dff384defaa69687349daa35b276a4320aa61046844b0014e0cb5R26
@@ -62,55 +59,33 @@ object TastyReader {
   }
 
   // TODO Async, Progress, GC, error handling
-  private lazy val api: ConsumeTasty = {
+  private lazy val api: TastyApi = {
     val jarFiles = {
       val tastyDirectory = tastyDirectoryFor(getClass)
-      val bundledJars =
-        Seq(
-          "tasty-runtime.jar",
-          "tasty-inspector.jar",
-          "tasty-core.jar",
-          "scala-interfaces.jar",
-          "scala-compiler.jar")
-          .map(new File(tastyDirectory, _)) ++
-          Seq( // TODO Why do we also need those libraries in the URL classloader? (it work fine using the main method, but not from IDEA)
-            s"scala-library-${BuildInfo.scalaVersion}.jar",
-            "scala3-library_3.0.0-M2-3.0.0-M2.jar")
-            .map(new File(tastyDirectory.getParent, _))
-      bundledJars.foreach(file => assert(file.exists(), "Not found: " + file.getPath))
-      bundledJars
+      val tastyFiles = tastyDirectory.listFiles()
+      Seq(
+        "scala3-compiler",
+        "scala3-interfaces",
+        "scala3-library", // TODO Use scala3-library in lib/ (when there will be one)
+        "scala3-tasty-inspector",
+        "tasty-core",
+        "tasty-runtime",
+      ).map(prefix => tastyFiles.find(_.getName.startsWith(prefix)).getOrElse(throw new FileNotFoundException(prefix))) :+
+        // TODO Why do we also need this library in the URL classloader? (it work fine using the main method, but not from IDEA)
+        new File(tastyDirectory.getParent, s"scala-library.jar")
     }
 
     val consumeTastyImplClass = {
       val urls = jarFiles.map(file => file.toURI.toURL).toArray
       val loader = new URLClassLoader(urls, getClass.getClassLoader)
-      loader.loadClass("scala.tasty.compat.ConsumeTastyImpl")
+      loader.loadClass("org.jetbrains.plugins.scala.tasty.TastyImpl")
     }
 
-    consumeTastyImplClass.getDeclaredConstructor().newInstance().asInstanceOf[ConsumeTasty]
+    consumeTastyImplClass.getDeclaredConstructor().newInstance().asInstanceOf[TastyApi]
   }
 
-  private def read(consumeTasty: ConsumeTasty, classpath: String, className: String, rightHandSide: Boolean): Option[TastyFile] = {
-    // TODO An ability to detect errors, https://github.com/lampepfl/dotty-feature-requests/issues/101
-    var result = Option.empty[TastyFile]
-
-    val tastyConsumer = new TastyConsumer {
-      override def apply(reflect: Reflection)(tree: reflect.delegate.Tree): Unit = {
-        val printer = new SourceCodePrinter[reflect.type](reflect, rightHandSide)
-        val text = printer.showTree(tree)
-        def file(path: String) = {
-          val i = path.replace('\\', '/').lastIndexOf("/")
-          if (i > 0) path.substring(i + 1) else path
-        }
-        val source = printer.sources.headOption.map(file).getOrElse("unknown.scala")
-        result = Some(TastyFile(source, text, printer.references, printer.types))
-      }
-    }
-
-    consumeTasty.apply(classpath, List(className), tastyConsumer)
-
-    result
-  }
+  private def read(api: TastyApi, classpath: String, className: String, rightHandSide: Boolean): Option[TastyFile] =
+    api.read(classpath, className, rightHandSide)
 
   private def tastyDirectoryFor(aClass: Class[_]): File = {
     val libDirectory = {
@@ -126,24 +101,24 @@ object TastyReader {
   // TODO Remove (convenience for debugging purposes)
   // NB: The plugin artifact must be build before running.
   // cd ~/IdeaProjects
-  // git clone https://github.com/lampepfl/dotty-example-project.git
-  // cd dotty-example-project ; sbt compile
+  // git clone https://github.com/scala/scala3-example-project
+  // cd scala3-example-project ; sbt compile
   def main(args: Array[String]): Unit = {
-    val DottyExampleProject = System.getProperty("user.home") + "/IdeaProjects/dotty-example-project"
+    val DottyExampleProject = System.getProperty("user.home") + "/IdeaProjects/scala3-example-project"
 
     def textAt(position: Position): String =
       if (position.start == -1) "<undefined>"
       else new String(Files.readAllBytes(Paths.get(DottyExampleProject + "/" + position.file))).substring(position.start, position.end)
 
     val exampleClasses = Seq(
-      "AutoParamTupling",
-      "ContextQueries",
+      "ContextFunctions",
       "Conversion",
       "EnumTypes",
-      "ImpliedInstances",
+      "GivenInstances",
       "IntersectionTypes",
       "Main",
       "MultiversalEquality",
+      "ParameterUntupling",
 //      "PatternMatching",
       "StructuralTypes",
       "TraitParams",
@@ -153,7 +128,7 @@ object TastyReader {
 
     assertExists(DottyExampleProject)
 
-    val outputDir = DottyExampleProject + "/target/scala-3.0.0-M2/classes"
+    val outputDir = DottyExampleProject + "/target/scala-3.0.0-RC2/classes"
     assertExists(outputDir)
 
     exampleClasses.foreach { fqn =>

@@ -6,14 +6,17 @@ import java.awt.{Dimension, Graphics, Graphics2D, Point, Rectangle, RenderingHin
 import com.intellij.ide.ui.laf.UIThemeBasedLookAndFeelInfo
 import com.intellij.ide.ui.{LafManager, UISettings}
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.ui.components.{JBPanelWithEmptyText, JBScrollPane}
 import com.intellij.util.ui.StartupUiUtil
 import org.jetbrains.plugins.scala.compilationCharts.ui.Common._
 import org.jetbrains.plugins.scala.compilationCharts.{CompilationProgressStateManager, CompileServerMetricsStateManager, Memory, Timestamp}
 import org.jetbrains.plugins.scala.extensions.{ObjectExt, invokeLater}
 
+import java.io.File
 import javax.swing.UIManager
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.math.Ordering.Implicits._
 
 class DiagramsComponent(chartsComponent: CompilationChartsComponent,
                         project: Project,
@@ -43,12 +46,23 @@ class DiagramsComponent(chartsComponent: CompilationChartsComponent,
       val selectedRow = diagram.rowCount - (e.getPoint.y / ProgressRowHeight).toInt - 1
       val selectedTime = currentZoom.fromPixels(e.getPoint.x)
 
+      def fileNameIn(path: String): String = {
+        val i = path.lastIndexOf(File.separatorChar)
+        if (i >= 0) path.substring(i + 1) else "?"
+      }
+      
       // TODO Use more effective search?
       for (group <- diagram.segmentGroups.lift(selectedRow);
            segment <- group.find(segment => segment.from <= selectedTime && segment.to >= selectedTime);
-           phase = segment.phases.find(it => it.from <= selectedTime && it.to >= selectedTime)) {
+           phase = if (currentLevel >= Level.Phases) segment.phases.find(it => it.from <= selectedTime && it.to >= selectedTime) else None;
+           unit = if (currentLevel >= Level.Units) segment.units.find(it => it.from <= selectedTime && it.to >= selectedTime) else None) {
         // TODO Show duration, number of files, etc. (maybe also labels)
-        setToolTipText(segment.unitId.moduleId + phase.map(" | " + _.name).getOrElse(""))
+        // TODO Implement navigation to file / module
+        setToolTipText(
+          unit.map(it => fileNameIn(it.path) + " | ").getOrElse("") +
+            phase.map(_.name.capitalize + " | ").getOrElse("") +
+            segment.unitId.moduleId
+        )
       }
     }
   })

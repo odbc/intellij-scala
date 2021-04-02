@@ -9,7 +9,7 @@ object Versions {
   val sbtVersion: String = Sbt.latest
   val bloopVersion = "1.4.5"
   val zincVersion = "1.4.0-M12"
-  val intellijVersion = "211.6222.4"
+  val intellijVersion = "211.6693.14"
   val bspVersion = "2.0.0-M12+27-4994bd9d-SNAPSHOT"
   val sbtStructureVersion: String = "2020.3"
   val sbtIdeaShellVersion: String = "2018.3"
@@ -23,9 +23,6 @@ object Versions {
     val binary_2_11 = "2.11"
     val binary_2_12 = "2.12"
     val binary_2_13 = "2.13"
-
-    val latest_dotty = "0.27.0-RC1"
-    val latest_scala3 = "3.0.0-M2"
 
     def binaryVersion(v: String): String =
       if (v.startsWith("2.9")) binary_2_9
@@ -115,8 +112,8 @@ object Dependencies {
   val compilerBridgeSources_2_10 = "org.scala-sbt" % "compiler-bridge_2.10" % zincVersion classifier "sources"
   val compilerBridgeSources_2_11 = "org.scala-sbt" % "compiler-bridge_2.11" % zincVersion classifier "sources"
   val compilerBridgeSources_2_13 = "org.scala-sbt" % "compiler-bridge_2.13" % zincVersion classifier "sources"
-  val dottySbtBridge = "ch.epfl.lamp" % "dotty-sbt-bridge" % Scala.latest_dotty
-  val scala3SbtBridge = "org.scala-lang" % "scala3-sbt-bridge" % Scala.latest_scala3
+  val dottySbtBridge = "ch.epfl.lamp" % "dotty-sbt-bridge" % "0.27.0-RC1"
+  val scala3SbtBridge = "org.scala-lang" % "scala3-sbt-bridge" % "3.0.0-M2"
 
   // "provided" danger: we statically depend on a single version, but need to support all the version
   // some part of our code is now statically dependent on lib classes, another part uses reflections for other versions
@@ -125,14 +122,6 @@ object Dependencies {
     val utest = "com.lihaoyi" %% "utest" % "0.7.4" % "provided"
     val specs2_2x = "org.specs2" % "specs2-core_2.12" % "2.4.17" % "provided" excludeAll ExclusionRule(organization = "org.ow2.asm")
     val specs2_4x = "org.specs2" %% "specs2-core" % "4.8.3" % "provided" excludeAll ExclusionRule(organization = "org.ow2.asm")
-  }
-
-  // TODO Use a lightweight TASTy library that doesn't require a full-blown Scala compiler (at least for indexing)
-  object tasty {
-    val inspector = "org.scala-lang" % "scala3-tasty-inspector_3.0.0-M2" % "3.0.0-M2"
-    val core = "org.scala-lang" % "tasty-core_3.0.0-M2" % "3.0.0-M2"
-    val interfaces = "org.scala-lang" % "scala3-interfaces" % "3.0.0-M2"
-    val compiler = "org.scala-lang" % "scala3-compiler_3.0.0-M2" % "3.0.0-M2"
   }
 
   /** The filtering function returns true for jars to be removed.
@@ -208,9 +197,5 @@ object DependencyGroups {
     compilerBridgeSources_2_13,
     dottySbtBridge,
     scala3SbtBridge,
-    tasty.inspector,
-    tasty.core,
-    tasty.interfaces,
-    tasty.compiler
   )
 }

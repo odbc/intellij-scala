@@ -145,6 +145,12 @@ class TypeMismatchHighlightingTest extends ScalaHighlightingTestBase {
     Hint("new A.C[Int]", ": A.C[Int]"),
     Error("new A.C[Int]", "Expression of type A.C[Int] doesn't conform to expected type C[Int]"))
 
+  // Type alias, SCL-18827
+  def testTypeAliasSeq(): Unit = assertErrors(
+    "val v: Seq[String] = Seq[Int]()", // scala.Seq = seq.collection.immutable.Seq
+    Hint("Seq[Int]()", ": Seq[Int]"),
+    Error("Seq[Int]()", "Expression of type Seq[Int] doesn't conform to expected type Seq[String]"))
+  
   // TODO test fine-grained errors
   // TODO test error tooltips
 
@@ -284,10 +290,18 @@ class TypeMismatchHighlightingTest extends ScalaHighlightingTestBase {
   def testTypeMismatchUnappliedGenericMethodTypeArgument(): Unit = assertErrors(
     "def f[T](t: T): Int = 1; val v: Int = f[Int]") // TODO missing arguments?
 
+  def testTypeMismatchUnappliedExtensionMethod(): Unit = assertErrors(
+    "implicit class AnyOps(val that: Any) { def f(x: Any): Unit = () }; val v: Int = 1.f",
+    Error("1.f", "Missing arguments for method f(Any)")) // TODO Exclude qualifier
+
   // TODO Highlight "& ", missing argument
   // The & is (incorrectly) highlighted by the LanguageFeatureInspection though, so there's at least some highlighting :)
   def testTypeMismatchUnappliedMethodInfix(): Unit = assertErrors(
     "object O { def &(i: String): Unit = () }; val v: Int = O &")
+
+  // TODO Highlight "-> ", missing argument
+  def testTypeMismatchUnappliedExtensionMethodInfix(): Unit = assertErrors(
+    "implicit class AnyOps(val that: Any) { def -> (x: Any): Unit = () }; val v: Int = 1 ->")
 
   def testTypeMismatchUnappliedCurrying(): Unit = assertErrors(
     "def f(i: Int)(s: String): Unit = (); val v: Int = f(1)",
@@ -372,4 +386,10 @@ class TypeMismatchHighlightingTest extends ScalaHighlightingTestBase {
     "val x = (p: Int) => 1; val v: Int = x",
     Hint("x", ": Int => Int"),
     Error("x", "Expression of type Int => Int doesn't conform to expected type Int"))
+  
+  // Incomplete if-then-else, #SCL-18862
+
+  // TODO Highlight "1 ", else expected (currently there's no highlighting for "if", "if ()", and "if (true)" cases anyway) 
+  def testIncompleteIfThenElse(): Unit = assertErrors(
+    "val v: Int = if (true) 1")
 }
