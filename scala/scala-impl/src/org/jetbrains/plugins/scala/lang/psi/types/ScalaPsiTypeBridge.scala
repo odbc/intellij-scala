@@ -13,9 +13,11 @@ import org.jetbrains.plugins.scala.lang.psi.api.toplevel.typedef.{ScClass, ScObj
 import org.jetbrains.plugins.scala.lang.psi.impl.toplevel.synthetic.ScSyntheticClass
 import org.jetbrains.plugins.scala.lang.psi.light.PsiClassWrapper
 import org.jetbrains.plugins.scala.lang.psi.types.ScalaPsiTypeBridge.RawTypeParamCollector
+import org.jetbrains.plugins.scala.lang.psi.types.api.TypePresentation.shouldExpand
 import org.jetbrains.plugins.scala.lang.psi.types.api._
 import org.jetbrains.plugins.scala.lang.psi.types.api.designator.{ScDesignatorType, ScProjectionType, ScThisType}
 import org.jetbrains.plugins.scala.lang.psi.types.nonvalue.NonValueType
+import org.jetbrains.plugins.scala.lang.psi.types.result.Failure
 
 import scala.collection.immutable.ArraySeq
 import scala.jdk.CollectionConverters._
@@ -154,7 +156,7 @@ trait ScalaPsiTypeBridge extends api.PsiTypeBridge {
       }
     }
 
-    val t = `type`.removeAliasDefinitions()
+    val t = expandIfAlias(`type`)
     if (t.isInstanceOf[NonValueType]) return toPsiTypeInner(t.inferValueType)
 
     def javaObject = createJavaObject
@@ -231,6 +233,15 @@ trait ScalaPsiTypeBridge extends api.PsiTypeBridge {
       case lit: ScLiteralType => toPsiTypeInner(lit.wideType)
       case _                  => javaObject
     }
+  }
+
+  private def expandIfAlias(scType: ScType): ScType = scType match {
+    case AliasType(ta: ScTypeAliasDefinition, _, upper) if shouldExpand(ta) =>
+      upper match {
+        case Failure(_) => projectContext.stdTypes.Any
+        case Right(u)   => u
+      }
+    case _ => scType
   }
 
   private def psiTypeOf(typeParameter: PsiTypeParameter): PsiType =
