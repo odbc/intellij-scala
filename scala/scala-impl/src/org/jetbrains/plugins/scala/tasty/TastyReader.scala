@@ -33,15 +33,16 @@ object TastyReader {
     }
   }
 
-  // TODO fully-qualified name VS .tasty file path
+  // TODO fully-qualified name VS .tasty file path, handle symbols
   // There is no way to read a specific (one) .tasty file in a JAR using the API of https://github.com/lampepfl/dotty/blob/M2/tasty-inspector/src/scala/tasty/inspector/TastyInspector.scala?
   def read(tastyPath: TastyPath, rightHandSide: Boolean = true): Option[TastyFile] = {
-    val tastyFilePath = tastyPath.className.replace('.', File.separatorChar) + ".tasty"
     if (tastyPath.classpath.endsWith(".jar")) {
-      extracting(tastyPath.classpath, tastyFilePath)(read(api, "", _, rightHandSide))
+      // TODO Why TASTy API needs the classpath (while accepting an absolute path to a .tasty file)
+      val jarEntry = tastyPath.className.replace('.', '/') + ".tasty"
+      extracting(tastyPath.classpath, jarEntry)(read(api, tastyPath.classpath, _, rightHandSide))
     } else {
-      val absoluteTastyFilePath = s"${tastyPath.classpath}${File.separator}$tastyFilePath"
-      read(api, tastyPath.classpath, absoluteTastyFilePath, rightHandSide)
+      val tastyFile = s"${tastyPath.classpath}${File.separator}${tastyPath.className.replace('.', File.separatorChar)}.tasty"
+      read(api, tastyPath.classpath, tastyFile, rightHandSide)
     }
   }
 
@@ -88,9 +89,9 @@ object TastyReader {
 
   private def read(api: TastyApi,
                    classpath: String,
-                   absoluteTastyFilePath: String,
+                   tastyFile: String,
                    rightHandSide: Boolean): Option[TastyFile] =
-    api.read(classpath, absoluteTastyFilePath, rightHandSide)
+    api.read(classpath, tastyFile, rightHandSide)
 
   private def tastyDirectoryFor(aClass: Class[_]): File = {
     val libDirectory = {
@@ -113,7 +114,7 @@ object TastyReader {
 
     def textAt(position: Position): String =
       if (position.start == -1) "<undefined>"
-      else new String(Files.readAllBytes(Paths.get(DottyExampleProject + "/" + position.file))).substring(position.start, position.end)
+      else new String(Files.readAllBytes(Paths.get(position.file))).substring(position.start, position.end)
 
     val exampleClasses = Seq(
       "ContextFunctions",
@@ -133,7 +134,7 @@ object TastyReader {
 
     assertExists(DottyExampleProject)
 
-    val outputDir = DottyExampleProject + "/target/scala-3.0.0-RC2/classes"
+    val outputDir = DottyExampleProject + "/target/scala-3.0.0-RC3/classes"
     assertExists(outputDir)
 
     exampleClasses.foreach { fqn =>

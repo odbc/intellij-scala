@@ -32,6 +32,8 @@ final class CompilerHighlightingService(project: Project)
 
   private val incrementalExecutor = new RescheduledExecutor("IncrementalCompilerHighlighting", this)
   private val documentExecutor = new RescheduledExecutor("DocumentCompilerHighlighting", this)
+  // TODO: unify/merge worksheet highlighting implementation with  DocumentCompiler and documentExecutor
+  //  they basically use the same idea: use temp file to highlight
   private val worksheetExecutor = new RescheduledExecutor("WorksheetCompilerHighlighting", this)
   private val showIndicatorExecutor = new RescheduledExecutor("CompilerHighlightingIndicator", this)
 
@@ -41,10 +43,10 @@ final class CompilerHighlightingService(project: Project)
                                     beforeCompilation: () => Unit = () => (),
                                     afterCompilation: () => Unit = () => ()): Unit =
     incrementalExecutor.schedule(ScalaHighlightingMode.compilationDelay) {
-      performCompilation(delayedProgressShow) {
+      performCompilation(delayedProgressShow) { client =>
         beforeCompilation()
         try {
-          IncrementalCompiler.compile(project, _)
+          IncrementalCompiler.compile(project, client)
         } finally {
           afterCompilation()
         }
@@ -53,9 +55,9 @@ final class CompilerHighlightingService(project: Project)
 
   def triggerDocumentCompilation(document: Document,
                                  afterCompilation: () => Unit = () => ()): Unit =
-    scheduleDocumentCompilation(documentExecutor, document) {
+    scheduleDocumentCompilation(documentExecutor, document) { client =>
       try {
-        DocumentCompiler.get(project).compile(document, _)
+        DocumentCompiler.get(project).compile(document, client)
       } finally {
         afterCompilation()
       }
@@ -64,9 +66,9 @@ final class CompilerHighlightingService(project: Project)
   def triggerWorksheetCompilation(psiFile: PsiFile,
                                   document: Document,
                                   afterCompilation: () => Unit = () => ()): Unit =
-    scheduleDocumentCompilation(worksheetExecutor, document) {
+    scheduleDocumentCompilation(worksheetExecutor, document) { client =>
       try {
-        WorksheetHighlightingCompiler.compile(psiFile, document, _)
+        WorksheetHighlightingCompiler.compile(psiFile, document, client)
       } finally {
         afterCompilation()
       }

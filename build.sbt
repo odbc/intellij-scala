@@ -1,7 +1,10 @@
 import Common._
-import Dependencies.{provided, sbtStructureExtractor}
+import Dependencies.provided
+import LocalRepoPackager.{localRepoDependencies, localRepoUpdate, relativeJarPath, sbtDep}
 import org.jetbrains.sbtidea.Keys._
 import sbtide.Keys.ideSkipProject
+
+import java.nio.file.Paths
 
 // Global build settings
 
@@ -11,10 +14,11 @@ intellijBuild in ThisBuild := Versions.intellijVersion
 
 intellijPlatform in ThisBuild := intellijPlatform.in(Global).??(IntelliJPlatform.IdeaCommunity).value
 
-resolvers in ThisBuild ++=
-  BintrayJetbrains.allResolvers :+
-    Resolver.typesafeIvyRepo("releases") :+
-    Resolver.sonatypeRepo("snapshots")
+ resolvers in ThisBuild ++= Seq(
+   Resolver.sonatypeRepo("releases"),
+   Resolver.sonatypeRepo("staging"),
+   Resolver.sonatypeRepo("snapshots"),
+ )
 
 javacOptions in Global := globalJavacOptions
 
@@ -121,9 +125,9 @@ lazy val worksheetReplInterface =
     )
 
 lazy val tastyRuntime = Project("tasty-runtime", file("tasty/runtime"))
-  .settings(scalaVersion := "3.0.0-RC2",
+  .settings(scalaVersion := "3.0.0-RC3",
     intellijMainJars := Seq.empty,
-    libraryDependencies += "org.scala-lang" % "scala3-tasty-inspector_3.0.0-RC2" % "3.0.0-RC2" excludeAll(
+    libraryDependencies += "org.scala-lang" % "scala3-tasty-inspector_3.0.0-RC3" % "3.0.0-RC3" excludeAll(
       ExclusionRule(organization = "org.scala-lang.modules"),
       ExclusionRule(organization = "org.scala-sbt"),
       ExclusionRule(organization = "org.jline"),
@@ -163,7 +167,7 @@ lazy val scalaImpl: sbt.Project =
         "org.intellij.intelliLang",
         "com.intellij.java-i18n",
         "org.jetbrains.android",
-        "com.intellij.stats.completion", // required for ml completion testing
+        //"com.intellij.stats.completion", // required for ml completion testing (plugin manager returns 404 for it)
         "com.android.tools.idea.smali",      // required by Android
         "com.intellij.gradle",     // required by Android
         "org.intellij.groovy",     // required by Gradle
@@ -193,12 +197,15 @@ lazy val scalaImpl: sbt.Project =
         BuildInfoKey.constant("sbtLatest_0_13", Versions.Sbt.latest_0_13),
         BuildInfoKey.constant("sbtLatest_1_0", Versions.Sbt.latest_1_0),
         BuildInfoKey.constant("sbtLatestVersion", Versions.sbtVersion),
-        BuildInfoKey.constant("sbtStructurePath_0_13",
-          LocalRepoPackager.relativeJarPath013("org.jetbrains", "sbt-structure-extractor", Versions.sbtStructureVersion)),
-        BuildInfoKey.constant("sbtStructurePath_1_0",
-          LocalRepoPackager.relativeJarPath1("org.jetbrains", "sbt-structure-extractor", Versions.sbtStructureVersion))
-      )
+        BuildInfoKey.constant("sbtStructurePath_0_13", 
+          relativeJarPath(sbtDep("org.jetbrains.scala","sbt-structure-extractor", Versions.sbtStructureVersion, "0.13"))),
+        BuildInfoKey.constant("sbtStructurePath_1_0", 
+          relativeJarPath(sbtDep("org.jetbrains.scala", "sbt-structure-extractor", Versions.sbtStructureVersion, "1.0")))
+        )
     )
+
+val nailgunJar = settingKey[File]("location of nailgun jar").withRank(KeyRanks.Invisible)
+nailgunJar in ThisBuild := (unmanagedBase in scalaCommunity).value / "nailgun.jar"
 
 lazy val compilerJps =
   newProject("compiler-jps", file("scala/compiler-jps"))
@@ -206,13 +213,13 @@ lazy val compilerJps =
     .settings(
       javacOptions  in Compile := outOfIDEAProcessJavacOptions,
       scalacOptions in Compile := outOfIDEAProcessScalacOptions,
-      packageMethod           :=  PackagingMethod.Standalone("lib/jps/compiler-jps.jar", static = true),
-      libraryDependencies     ++= Seq(Dependencies.nailgun,
-                                      Dependencies.zincInterface,
-                                      Dependencies.scalaParallelCollections),
-      packageLibraryMappings  ++= Dependencies.nailgun       -> Some("lib/jps/nailgun.jar") ::
-                                  Dependencies.zincInterface -> Some("lib/jps/compiler-interface.jar") ::
-                                  Dependencies.scalaParallelCollections -> Some("lib/jps/scala-parallel-collections.jar") :: Nil
+      packageMethod            :=  PackagingMethod.Standalone("lib/jps/compiler-jps.jar", static = true),
+      Compile/unmanagedJars    += nailgunJar.value,
+      libraryDependencies      ++= Seq(Dependencies.zincInterface, Dependencies.scalaParallelCollections),
+      packageLibraryMappings   ++= Seq(
+        Dependencies.zincInterface -> Some("lib/jps/compiler-interface.jar"),
+        Dependencies.scalaParallelCollections -> Some("lib/jps/scala-parallel-collections.jar")
+      )
     )
 
 lazy val repackagedZinc =
@@ -229,9 +236,9 @@ lazy val compilerShared =
     .settings(
       javacOptions  in Compile := outOfIDEAProcessJavacOptions,
       scalacOptions in Compile := outOfIDEAProcessScalacOptions,
-      libraryDependencies ++= Seq(Dependencies.nailgun, Dependencies.compilerIndicesProtocol, Dependencies.zincInterface),
+      Compile/unmanagedJars += nailgunJar.value,
+      libraryDependencies ++= Seq(Dependencies.compilerIndicesProtocol, Dependencies.zincInterface),
       packageLibraryMappings ++= Seq(
-        Dependencies.nailgun                 -> Some("lib/jps/nailgun.jar"),
         Dependencies.compilerIndicesProtocol -> Some("lib/scala-compiler-indices-protocol_2.12-0.1.1.jar")
       ),
       packageMethod := PackagingMethod.Standalone("lib/compiler-shared.jar", static = true)
@@ -317,8 +324,8 @@ lazy val nailgunRunners =
     .settings(
       javacOptions  in Compile := outOfIDEAProcessJavacOptions,
       scalacOptions in Compile := outOfIDEAProcessScalacOptions,
-      libraryDependencies += Dependencies.nailgun,
-      packageLibraryMappings += Dependencies.nailgun -> Some("lib/jps/nailgun.jar"),
+      Compile/unmanagedJars += nailgunJar.value,
+      packageFileMappings += nailgunJar.value -> "lib/jps/nailgun.jar",
       packageMethod := PackagingMethod.Standalone("lib/scala-nailgun-runner.jar", static = true)
     )
 
@@ -423,21 +430,16 @@ lazy val mlCompletionIntegration =
     .dependsOn(scalaImpl)
     .settings(
       intellijPlugins += "com.intellij.completion.ml.ranking".toPlugin,
-      resolvers += Resolver.bintrayRepo("jetbrains", "intellij-third-party-dependencies"),
+      resolvers += "intellij-dependencies" at "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies/",
       libraryDependencies += "org.jetbrains.intellij.deps.completion" % "completion-ranking-scala" % "0.3.2"
     )
 
 
 // Utility projects
 
-val localRepoArtifacts =
-  ("org.jetbrains", sbtStructureExtractor.name,  Versions.sbtStructureVersion) ::
-  ("org.jetbrains", "sbt-idea-shell",            Versions.sbtIdeaShellVersion) ::
-  ("org.jetbrains.scala" ,"sbt-idea-compiler-indices", Versions.compilerIndicesVersion) :: Nil
-val localRepoPaths = LocalRepoPackager.localPluginRepoPaths(localRepoArtifacts)
-
 lazy val runtimeDependencies =
   (project in file("target/tools/runtime-dependencies"))
+    .enablePlugins(LocalRepoPackager)
     .settings(
       scalaVersion := Versions.scalaVersion,
       libraryDependencies := DependencyGroups.runtime,
@@ -458,17 +460,22 @@ lazy val runtimeDependencies =
         Dependencies.compilerBridgeSources_2_11 -> Some("lib/jps/compiler-interface-sources-2.11.jar"),
         Dependencies.compilerBridgeSources_2_10 -> Some("lib/jps/compiler-interface-sources-2.10.jar"),
       ),
+      localRepoDependencies := List(
+        sbtDep("org.jetbrains.scala", "sbt-structure-extractor", Versions.sbtStructureVersion, Versions.Sbt.binary_0_13),
+        sbtDep("org.jetbrains.scala", "sbt-structure-extractor", Versions.sbtStructureVersion, Versions.Sbt.binary_1_0),
+        sbtDep("org.jetbrains.scala", "sbt-idea-shell", Versions.sbtIdeaShellVersion, Versions.Sbt.binary_0_13),
+        sbtDep("org.jetbrains.scala", "sbt-idea-shell", Versions.sbtIdeaShellVersion, Versions.Sbt.binary_1_0),
+        sbtDep("org.jetbrains.scala", "sbt-idea-compiler-indices", Versions.compilerIndicesVersion, Versions.Sbt.binary_0_13),
+        sbtDep("org.jetbrains.scala", "sbt-idea-compiler-indices", Versions.compilerIndicesVersion, Versions.Sbt.binary_1_0)
+      ),
       update := {
-        LocalRepoPackager.localPluginRepo(
-          target.value / "repo",
-          localRepoPaths,
-          (ThisBuild/baseDirectory).value / "project" / "resources")
+        localRepoUpdate.value
         update.value
       },
       packageFileMappings ++= {
-        val repoBase = target.value / "repo"
-        localRepoPaths.map { path =>
-          repoBase / path -> s"repo/$path"
+        localRepoUpdate.value.map { case (src, trg) =>
+          val targetPath = Paths.get("repo").resolve(trg)
+          src.toFile -> targetPath.toString
         }
       }
     )
@@ -484,7 +491,6 @@ import Common.TestCategory._
 def testOnlyCategory(category: String): String =
   s"testOnly -- --include-categories=$category --exclude-categories=$flakyTests"
 
-addCommandAlias("runPerfOptTests", testOnlyCategory(perfOptTests))
 addCommandAlias("runSlowTests", testOnlyCategory(slowTests))
 addCommandAlias("runDebuggerTests", testOnlyCategory(debuggerTests))
 addCommandAlias("runHighlightingTests", testOnlyCategory(highlightingTests))
@@ -497,7 +503,6 @@ addCommandAlias("runFlakyTests", s"testOnly -- --include-categories=$flakyTests"
 val fastTestOptions = "-v -s -a +c +q " +
   s"--exclude-categories=$slowTests " +
   s"--exclude-categories=$debuggerTests " +
-  s"--exclude-categories=$perfOptTests " +
   s"--exclude-categories=$scalacTests " +
   s"--exclude-categories=$typecheckerTests " +
   s"--exclude-categories=$testingSupportTests " +
